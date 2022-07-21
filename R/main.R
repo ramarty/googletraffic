@@ -1,8 +1,3 @@
-# TODO
-# 1. Google Maps Traffic
-# 2. Bing Traffic; more extensive colors
-
-# https://stackoverflow.com/questions/9298326/google-static-maps-with-traffic-and-public-transport-overlays
 
 library(tidyverse)
 library(googleway)
@@ -17,20 +12,6 @@ library(geosphere)
 library(httr)
 library(rgeos)
 
-api_keys_df <- read_csv("~/Dropbox/World Bank/Webscraping/Files for Server/api_keys.csv")
-
-map_key <- api_keys_df %>%
-  dplyr::filter(Service == "Google Directions API",
-                Account == "ramarty@email.wm.edu") %>%
-  pull(Key)
-
-bing_key <- api_keys_df %>%
-  dplyr::filter(Service == "Bing Maps",
-                Account == "robmarty3@gmail.com") %>%
-  pull(Key)
-
-
-# Make functions ---------------------------------------------------------------
 #' Get traffic raster from Bing Maps
 #'
 #' This function returns a raster of traffic levels from Bing Maps.
@@ -42,7 +23,7 @@ bing_key <- api_keys_df %>%
 #' @param zoom Zoom; integer from 0 to 20. For more information, see [here](https://wiki.openstreetmap.org/wiki/Zoom_levels)
 #' @param bing_key Bing API key
 #' 
-#' @return Raster with the following values: 1 = No traffic; 2 = Light traffic; 3 = Moderate traffic; 4 = Heavy traffic
+#' @return Returns a georeferenced raster file. The file can contain the following values: 1 = no traffic; 2 = light traffic; 3 = moderate traffic; 4 = heavy traffic.
 #' @export
 bing_traffic <- function(latitude,
                          longitude,
@@ -142,14 +123,28 @@ bing_traffic <- function(latitude,
   return(r)
 }
 
-make_html <- function(location,
-                      height,
-                      width,
-                      zoom,
-                      out_dir,
-                      filename_prefix,
-                      map_key,
-                      time = NULL){
+#' Make traffic html from Google
+#'
+#' This function returns an html of traffic from Google. The `gt_html_to_raster()` can
+#' then be used to convert this html into a georeferenced raster file. 
+#'
+#' @param location Vector of latitude and longitude
+#' @param height Height
+#' @param width Width
+#' @param zoom Zoom; integer from 0 to 20. For more information, see [here](https://wiki.openstreetmap.org/wiki/Zoom_levels)
+#' @param filename Path and filename to save file
+#' @param google_key Google API key
+#' @param save_params Save an .Rds file that contains the parameters (location, height, width and zoom). This file can then be used by the `gt_html_to_raster()` function.
+#' 
+#' @return Returns an html file of Google traffic
+#' @export
+gt_make_html <- function(location,
+                         height,
+                         width,
+                         zoom,
+                         filename,
+                         google_key,
+                         save_params = T){
   
   # Adapted from: https://snazzymaps.com/style/95/roadie
   style <- '[
@@ -196,7 +191,7 @@ make_html <- function(location,
 ]'
   
   
-  gmap <- google_map(key = map_key,
+  gmap <- google_map(key = google_key,
                      location = location,
                      zoom = zoom,
                      height = height,
@@ -211,29 +206,48 @@ make_html <- function(location,
     add_traffic() 
   
   ## Filename
-  if(is.null(time)){
-    time <- Sys.time() %>% as.numeric() %>% as.character() %>% str_replace_all("[[:punct:]]", "")
-  }
+  #if(is.null(time)){
+  #  time <- Sys.time() %>% as.numeric() %>% as.character() %>% str_replace_all("[[:punct:]]", "")
+  #}
   
   ## Save as html
-  fname <- paste0(filename_prefix, "utc", time)
+  #fname <- paste0(filename_prefix, "utc", time)
   saveWidget(gmap, 
-             file.path(out_dir,paste0(fname,".html")), 
+             file.path(filename), 
              selfcontained = T)
   
+  ## Make param dataframe
+  param_list <- list(location = location,
+                     height = height,
+                     width = width,
+                     zoom = zoom)
+  
+  if(save_params){
+    saveRDS(param_list, filename %>% str_replace_all(".html$", "_params.Rds"))
+  }
+  
+  
   ## Also creates folder; delete that
-  unlink(file.path(out_dir, paste0(fname, "_files")), recursive = T)
+  unlink(filename %>% str_replace_all(".html$", "_files"), 
+         recursive = T)
   
   return(NULL)
 }
 
-det_google_pixel_dist_m <- function(latitude, zoom){
-  # https://wiki.openstreetmap.org/wiki/Zoom_levels
-  pixel_dist_m <- (2*pi*6378137*cos(deg2rad(latitude))/2^zoom)/256
-  
-  return(pixel_dist_m)
-}
+# det_google_pixel_dist_m <- function(latitude, zoom){
+#   # https://wiki.openstreetmap.org/wiki/Zoom_levels
+#   pixel_dist_m <- (2*pi*6378137*cos(deg2rad(latitude))/2^zoom)/256
+#   
+#   return(pixel_dist_m)
+# }
 
+#' Determine pixel distance in decimal degrees
+#'
+#' Based on the zoom level, determine the height/width of each pixel in decimal degrees
+#'
+#' @param zoom Zoom level
+#'
+#' @return Returns the pixel height/width in decimal degrees (integer)
 det_google_pixel_dist_deg <- function(zoom){
   # https://wiki.openstreetmap.org/wiki/Zoom_levels
   pixel_dist_deg <- 360/(2^zoom)/256
@@ -241,11 +255,22 @@ det_google_pixel_dist_deg <- function(zoom){
   return(pixel_dist_deg)
 }
 
-make_extent <- function(latitude,
-                        longitude,
-                        height,
-                        width,
-                        zoom){
+#' Determine the spatial extent of a Google traffic tile
+#'
+#' Based on the location, height, width, and zoom, determines the spatial extent of the Google traffic tile
+#'
+#' @param latitude Latitude
+#' @param longitude Longitude
+#' @param height Height
+#' @param width Width
+#' @param zoom Zoom level
+#'
+#' @return Returns an extent object
+gt_make_extent <- function(latitude,
+                           longitude,
+                           height,
+                           width,
+                           zoom){
   
   pixel_dist_deg <- det_google_pixel_dist_deg(zoom)
   
@@ -262,11 +287,23 @@ make_extent <- function(latitude,
   return(r_extent)
 }
 
-make_point_grid <- function(polygon,
-                            height,
-                            width,
-                            zoom,
-                            reduce_hw = 0){
+#' Creates grid of points to query Google Traffic 
+#'
+#' Querying too large of a location may be unfeasible; consequently, it may be necessary to query multiple smaller locations. Based on the location to be queried and the height, width and zoom parameters, determines the points that should be queried.
+#'
+#' @param polygon `SpatialPolygonsDataframe` the defines region to be queried.
+#' @param height Height
+#' @param width Width
+#' @param zoom Zoom level
+#' @param reduce_hw Number of pixels to reduce height/width by. The tiles produced by the function may not exactly overlap. Reducing the height and width ensures overlap to eventually remove any blank space.
+#'
+#' @return Returns a dataframe with the locations to query and parameters.
+#' @export
+gt_make_point_grid <- function(polygon,
+                               height,
+                               width,
+                               zoom,
+                               reduce_hw = 100){
   
   ## Reduce height/width
   # Extents may not perfectly connect. Reducing the height and width aims to create
@@ -301,14 +338,52 @@ make_point_grid <- function(polygon,
   return(points_df)
 }
 
-html_to_raster <- function(filename,
-                           latitude,
-                           longitude,
-                           height,
-                           width,
-                           zoom,
-                           webshot_delay = 10,
-                           save_png = F){
+#' Converts Google HTML file to Raster
+#' 
+#' Converts a Google HTML file into a spatially referenced raster file. 
+#'
+#' @param polygon `SpatialPolygonsDataframe` the defines region to be queried.
+#'
+#' ## If `save_params` is set to `FALSE` in `gt_make_html` or `gt_make_htmls_from_grid`, then the following must be specified
+#' @param height Height
+#' @param width Width
+#' @param zoom Zoom level
+#'
+#' ## Other parameters
+#' @param webshot_delay How long to wait for .html file to load. Larger .html files will require more time to fully load.
+#' @param save_png The function creates a .png file as an intermediate step. Specify whether the .png file should be kept (default: `FALSE`)
+#'
+#' @return Returns a georeferenced raster file. The file can contain the following values: 1 = no traffic; 2 = light traffic; 3 = moderate traffic; 4 = heavy traffic.
+#' @export
+gt_html_to_raster <- function(filename,
+                              location = NULL,
+                              height = NULL,
+                              width = NULL,
+                              zoom = NULL,
+                              webshot_delay = 10,
+                              save_png = F){
+  
+  ## Grab parameters from dataframe
+  if(is.null(location) | is.null(height) | is.null(width) | is.null(zoom)){
+    param_df_filename <- filename %>% str_replace_all(".html$", "_params.Rds")
+    
+    if(file.exists(param_df_filename)){
+      param_df <- readRDS(param_df_filename)
+      
+      location = param_df$location
+      height   = param_df$height
+      width    = param_df$width
+      zoom     = param_df$zoom
+      
+    } else{
+      stop("location, height, width, or zoom not specified and parameter dataframe doesn't exist")
+    }
+    
+  }
+  
+  #### Make lat/lon
+  latitude = location[1]
+  longitude = location[2]
   
   #### Convert .html to png
   filename_root <- filename %>% str_replace_all(".html$", "")
@@ -366,11 +441,11 @@ html_to_raster <- function(filename,
   r[rimg %in% "dark-red"] <- 4
   
   ## Spatially define raster
-  extent(r) <- make_extent(latitude,
-                           longitude,
-                           height,
-                           width,
-                           zoom)
+  extent(r) <- gt_make_extent(latitude,
+                              longitude,
+                              height,
+                              width,
+                              zoom)
   
   crs(r) <- CRS("+init=epsg:4326")
   
@@ -382,73 +457,106 @@ html_to_raster <- function(filename,
   return(r)
 }
 
-# Implement functions ----------------------------------------------------------
-#### Points to query
-nbo <- getData('GADM', country ='KEN', level=1)
-nbo <- nbo[nbo$NAME_1 %in% "Nairobi",]
-
-grid_param_df <- make_point_grid(polygon = nbo,
-                                 height = 6000,
-                                 width = 6000,
-                                 zoom = 16,
-                                 reduce_hw = 100)
-
-make_htmls_grid <- function(grid_param_df,
-                            filename_prefix,
-                            out_dir,
-                            map_key){
+#' Make multiple traffic html from Google based on grid of points
+#'
+#' This function returns multiple html of traffic from Google based on a grid defined by `gt_make_point_grid`. The `gt_htmls_to_raster()` can then be used to these html files into a georeferenced raster file. 
+#'
+#' @param location Vector of latitude and longitude
+#' @param height Height
+#' @param width Width
+#' @param zoom Zoom; integer from 0 to 20. For more information, see [here](https://wiki.openstreetmap.org/wiki/Zoom_levels)
+#' @param filename Path and filename to save file
+#' @param google_key Google API key
+#' @param save_params Save an .Rds file that contains the parameters (location, height, width and zoom). This file can then be used by the `gt_html_to_raster()` function.
+#' 
+#' @return Returns an html file of Google traffic
+#' @export
+gt_make_htmls_from_grid <- function(grid_param_df,
+                                    filename_suffix,
+                                    out_dir,
+                                    google_key,
+                                    save_params = T){
   
   #### Time to add to filename
-  time <- Sys.time() %>% 
-    as.numeric() %>% 
-    as.character() %>% 
-    str_replace_all("[[:punct:]]", "")
+  # time <- Sys.time() %>% 
+  #   as.numeric() %>% 
+  #   as.character() %>% 
+  #   str_replace_all("[[:punct:]]", "")
   
   #### Make HTML files
   for(id in grid_param_df$id){
     
     points_to_query_i <- points_to_query[points_to_query$id %in% id,]
     
-    make_html(location = c(points_to_query_i$latitude, points_to_query_i$longitude),
-              height = points_to_query_i$height,
-              width = points_to_query_i$height,
-              zoom = points_to_query_i$zoom,
-              out_dir =out_dir,
-              filename_prefix = paste0(id,"_",filename_prefix,"_"),
-              map_key = map_key,
-              time = time)
+    gt_make_html(location = c(points_to_query_i$latitude, points_to_query_i$longitude),
+                 height = points_to_query_i$height,
+                 width = points_to_query_i$height,
+                 zoom = points_to_query_i$zoom,
+                 filename = paste0(id,"_",filename_suffix,".html"),
+                 google_key = google_key,
+                 save_params = save_params)
     
   }
   
   return("Done!")
 }
 
-htmls_to_raster <- function(html_files,
-                            grid_param_df,
-                            webshot_delay,
-                            save_png = F,
-                            print_progress = T){
+#' Converts multiple Google HTML files into a raster
+#' 
+#' Converts a multiple Google HTML files into a single spatially referenced raster file. 
+#' 
+#' @param html_files Vector of html_files
+#' @param webshot_delay How long to wait for .html file to load. Larger .html files will require more time to fully load.
+#'
+#' ## If `save_params` is set to `FALSE` in `gt_make_htmls_from_grid`, then the following must be specified
+#' @param grid_param_df Grid parameter dataframed defined by `gt_make_point_grid()`
+#'
+#' ## Other parameters
+#' @param save_png The function creates a .png file as an intermediate step. Specify whether the .png file should be kept (default: `FALSE`)
+#' @param print_progress Whether to print progress to show which file the function is processing (default: `TRUE`)
+#' 
+#' @return Returns a georeferenced raster file. The file can contain the following values: 1 = no traffic; 2 = light traffic; 3 = moderate traffic; 4 = heavy traffic.
+#' @export
+gt_htmls_to_raster <- function(html_files,
+                               webshot_delay,
+                               grid_param_df = NULL,
+                               save_png = F,
+                               print_progress = T){
   
   r_list <- lapply(html_files, function(file_i){
     if(print_progress){
       print(paste0("Processing: ", file_i))
     }
     
-    id <- file_i %>% 
-      str_replace_all(".*/", "") %>% 
-      str_replace_all("_.*", "") %>% 
-      as.numeric()
+    if(!is.null(grid_param_df)){
+      id <- file_i %>% 
+        str_replace_all(".*/", "") %>% 
+        str_replace_all("_.*", "") %>% 
+        as.numeric()
+      
+      param_i <- grid_param_df[grid_param_df$id %in% id,]
+      
+      location = c(param_i$latitude, param_i$longitude)
+      
+    } else{
+      
+      params_filename <- file_i %>% str_replace_all(".html$", "_params.Rds")
+      param_i     <- readRDS(params_filename)
+      
+      location = param_i$location
+    }
     
-    param_i <- grid_param_df[grid_param_df$id %in% id,]
+    height   = param_i$height
+    width    = param_i$width
+    zoom     = param_i$zoom
     
-    html_to_raster(file_i,
-                   latitude = param_i$latitude,
-                   longitude = param_i$longitude,
-                   height = param_i$height,
-                   width = param_i$width,
-                   zoom = param_i$zoom,
-                   webshot_delay = webshot_delay,
-                   save_png = save_png)
+    gt_html_to_raster(file_i,
+                      c(param_i$latitude, param_i$longitude),
+                      height = param_i$height,
+                      width = param_i$width,
+                      zoom = param_i$zoom,
+                      webshot_delay = webshot_delay,
+                      save_png = save_png)
   })
   
   # TODO: Param...
@@ -464,46 +572,4 @@ htmls_to_raster <- function(html_files,
   return(r_all)
   
 }
-
-## Multiple rasters, one time period
-make_htmls_grid(grid_param_df = grid_param_df,
-                filename_prefix = "nbo_gtt",
-                out_dir = "~/Desktop/gtt/html",
-                map_key = map_key)
-
-html_files <- list.files("~/Desktop/gtt/html", pattern = ".html$", full.names = T)
-
-r <- htmls_to_raster(html_files = html_files,
-                     grid_param_df = grid_param_df,
-                     webshot_delay = 22)
-
-## Multiple rasters, multiple time periods
-
-
-
-#### Make rasters
-
-
-writeRaster(r_all, "~/Desktop/test.tiff",overwrite=TRUE)
-saveRDS(r_all, "~/Desktop/test.Rds")
-
-r_test <- mosaic(r_list[[1]],
-                 #r_list[[2]],
-                 #r_list[[3]],
-                 r_list[[4]],
-                 #r_list[[5]],
-                 #r_list[[6]],
-                 fun = max,
-                 tolerance = 1)
-
-
-#r_test <- r_list[[2]]
-library(leaflet)
-pal <- colorNumeric(c("#0C2C84", "#41B6C4", "#FFFFCC"), values(r_test),
-                    na.color = "transparent")
-
-leaflet() %>% addTiles() %>%
-  addRasterImage(r_test, colors = pal, opacity = 0.7) %>%
-  addLegend(pal = pal, values = values(r_test),
-            title = "Traffic")
 
