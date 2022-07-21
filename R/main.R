@@ -31,8 +31,21 @@ bing_key <- api_keys_df %>%
 
 
 # Make functions ---------------------------------------------------------------
-bing_traffic <- function(lat_orig,
-                         lon_orig,
+#' Get traffic raster from Bing Maps
+#'
+#' This function returns a raster of traffic levels from Bing Maps.
+#'
+#' @param latitude Latitude of center of area
+#' @param longitude Longitude of center of area
+#' @param height Height
+#' @param width Width
+#' @param zoom Zoom; integer from 0 to 20. For more information, see [here](https://wiki.openstreetmap.org/wiki/Zoom_levels)
+#' @param bing_key Bing API key
+#' 
+#' @return Raster with the following values: 1 = No traffic; 2 = Light traffic; 3 = Moderate traffic; 4 = Heavy traffic
+#' @export
+bing_traffic <- function(latitude,
+                         longitude,
                          height,
                          width,
                          zoom,
@@ -60,14 +73,14 @@ bing_traffic <- function(lat_orig,
                  sep="_")
   
   bing_metadata_url <- paste0("https://dev.virtualearth.net/REST/v1/Imagery/Map/Road/",
-                              lat_orig,",",lon_orig,"/",zoom,
+                              latitude,",",longitude,"/",zoom,
                               "?mapSize=",height,",",width,
                               "&style=",style,
                               "&mmd=1",
                               "&mapLayer=TrafficFlow&format=png&key=",bing_key)
   
   bing_map_url <- paste0("https://dev.virtualearth.net/REST/v1/Imagery/Map/Road/",
-                         lat_orig,",",lon_orig,"/",zoom,
+                         latitude,",",longitude,"/",zoom,
                          "?mapSize=",height,",",width,
                          "&style=",style,
                          "&mapLayer=TrafficFlow&format=png&key=",bing_key)
@@ -135,7 +148,8 @@ make_html <- function(location,
                       zoom,
                       out_dir,
                       filename_prefix,
-                      map_key){
+                      map_key,
+                      time = NULL){
   
   # Adapted from: https://snazzymaps.com/style/95/roadie
   style <- '[
@@ -197,10 +211,12 @@ make_html <- function(location,
     add_traffic() 
   
   ## Filename
-  time <- Sys.time() %>% as.numeric() %>% as.character() %>% str_replace_all("[[:punct:]]", "")
+  if(is.null(time)){
+    time <- Sys.time() %>% as.numeric() %>% as.character() %>% str_replace_all("[[:punct:]]", "")
+  }
   
   ## Save as html
-  fname <- paste0(filename_prefix,time)
+  fname <- paste0(filename_prefix, "utc", time)
   saveWidget(gmap, 
              file.path(out_dir,paste0(fname,".html")), 
              selfcontained = T)
@@ -211,9 +227,9 @@ make_html <- function(location,
   return(NULL)
 }
 
-det_google_pixel_dist_m <- function(lat_orig, zoom){
+det_google_pixel_dist_m <- function(latitude, zoom){
   # https://wiki.openstreetmap.org/wiki/Zoom_levels
-  pixel_dist_m <- (2*pi*6378137*cos(deg2rad(lat_orig))/2^zoom)/256
+  pixel_dist_m <- (2*pi*6378137*cos(deg2rad(latitude))/2^zoom)/256
   
   return(pixel_dist_m)
 }
@@ -225,45 +241,18 @@ det_google_pixel_dist_deg <- function(zoom){
   return(pixel_dist_deg)
 }
 
-make_extent <- function(lat_orig, 
-                        lon_orig, 
+make_extent <- function(latitude,
+                        longitude,
                         height,
                         width,
                         zoom){
   
-  pixel_dist_m <- det_google_pixel_dist_m(lat_orig, zoom)
-  
   pixel_dist_deg <- det_google_pixel_dist_deg(zoom)
-  point_right  <- lon_orig + pixel_dist_deg*width/2
-  point_left   <- lon_orig - pixel_dist_deg*width/2
-  point_bottom <- lat_orig - pixel_dist_deg*height/2
-  point_top    <- lat_orig + pixel_dist_deg*height/2
   
-  # Divide by 2, as use "radius", not "diameter"
-  # point_right <- destPoint(p = c(lon_orig,
-  #                                lat_orig),
-  #                          b = 90,
-  #                          d = pixel_dist_m*width/2)
-  # 
-  # point_left <- destPoint(p = c(lon_orig,
-  #                               lat_orig),
-  #                         b = 270,
-  #                         d = pixel_dist_m*width/2)
-  # 
-  # point_bottom <- destPoint(p = c(lon_orig,
-  #                                 lat_orig),
-  #                           b = 180,
-  #                           d = pixel_dist_m*height/2)
-  # 
-  # point_top <- destPoint(p = c(lon_orig,
-  #                              lat_orig),
-  #                        b = 0,
-  #                        d = pixel_dist_m*height/2)
-  
-  # r_extent <- extent(point_left[1],
-  #                    point_right[1],
-  #                    point_bottom[2],
-  #                    point_top[2])
+  point_right    <- longitude + pixel_dist_deg*width/2
+  point_left     <- longitude - pixel_dist_deg*width/2
+  point_bottom   <- latitude - pixel_dist_deg*height/2
+  point_top      <- latitude + pixel_dist_deg*height/2
   
   r_extent <- extent(point_left,
                      point_right,
@@ -302,8 +291,8 @@ make_point_grid <- function(polygon,
   points_df <- p_inter %>%
     coordinates() %>%
     as.data.frame() %>%
-    dplyr::rename(lon = V1,
-                  lat = V2) %>%
+    dplyr::rename(longitude = V1,
+                  latitude = V2) %>%
     mutate(id = 1:n(),
            height = height,
            width = width,
@@ -313,8 +302,8 @@ make_point_grid <- function(polygon,
 }
 
 html_to_raster <- function(filename,
-                           lat_orig,
-                           lon_orig,
+                           latitude,
+                           longitude,
                            height,
                            width,
                            zoom,
@@ -377,8 +366,8 @@ html_to_raster <- function(filename,
   r[rimg %in% "dark-red"] <- 4
   
   ## Spatially define raster
-  extent(r) <- make_extent(lat_orig, 
-                           lon_orig, 
+  extent(r) <- make_extent(latitude,
+                           longitude,
                            height,
                            width,
                            zoom)
@@ -394,109 +383,112 @@ html_to_raster <- function(filename,
 }
 
 # Implement functions ----------------------------------------------------------
-#### One location
-lat_orig <- -1.294727 
-lon_orig <- 36.821611
-height <- 5000
-width <- 5000
-zoom = 16
-
-make_html(location = c(lat_orig, lon_orig),
-          height = height,
-          width = width,
-          zoom = zoom,
-          out_dir = "~/Desktop/gtt/html",
-          filename_prefix = paste0(1,"_nairobi_gtt_"),
-          map_key = map_key)
-
-html_files <- list.files("~/Desktop/gtt/html", pattern = ".html$", full.names = T)
-file_i <- html_files[1]
-
-r <- html_to_raster(file_i,
-                    lat_orig = lat_orig,
-                    lon_orig = lon_orig,
-                    height = height,
-                    width = width,
-                    zoom = zoom,
-                    webshot_delay = 15,
-                    save_png = T)
-
-library(leaflet)
-pal <- colorNumeric(c("#0C2C84", "#41B6C4", "#FFFFCC"), values(r),
-                    na.color = "transparent")
-
-leaflet() %>% addTiles() %>%
-  addRasterImage(r, colors = pal, opacity = 0.7) %>%
-  addLegend(pal = pal, values = values(r),
-            title = "Traffic")
-
-
-
-
-
-
 #### Points to query
 nbo <- getData('GADM', country ='KEN', level=1)
 nbo <- nbo[nbo$NAME_1 %in% "Nairobi",]
 
-points_to_query <- make_point_grid(polygon = nbo,
-                                   height = 6000,
-                                   width = 6000,
-                                   zoom = 16,
-                                   reduce_hw = 0)
+grid_param_df <- make_point_grid(polygon = nbo,
+                                 height = 6000,
+                                 width = 6000,
+                                 zoom = 16,
+                                 reduce_hw = 100)
 
-#### Make HTML files
-for(id in points_to_query$id){
+make_htmls_grid <- function(grid_param_df,
+                            filename_prefix,
+                            out_dir,
+                            map_key){
   
-  points_to_query_i <- points_to_query[points_to_query$id %in% id,]
+  #### Time to add to filename
+  time <- Sys.time() %>% 
+    as.numeric() %>% 
+    as.character() %>% 
+    str_replace_all("[[:punct:]]", "")
   
-  make_html(location = c(points_to_query_i$lat, points_to_query_i$lon),
-            height = points_to_query_i$height,
-            width = points_to_query_i$height,
-            zoom = points_to_query_i$zoom,
-            out_dir = "~/Desktop/gtt/html",
-            filename_prefix = paste0(id,"_nairobi_gtt_"),
-            map_key = map_key)
+  #### Make HTML files
+  for(id in grid_param_df$id){
+    
+    points_to_query_i <- points_to_query[points_to_query$id %in% id,]
+    
+    make_html(location = c(points_to_query_i$latitude, points_to_query_i$longitude),
+              height = points_to_query_i$height,
+              width = points_to_query_i$height,
+              zoom = points_to_query_i$zoom,
+              out_dir =out_dir,
+              filename_prefix = paste0(id,"_",filename_prefix,"_"),
+              map_key = map_key,
+              time = time)
+    
+  }
+  
+  return("Done!")
+}
+
+htmls_to_raster <- function(html_files,
+                            grid_param_df,
+                            webshot_delay,
+                            save_png = F,
+                            print_progress = T){
+  
+  r_list <- lapply(html_files, function(file_i){
+    if(print_progress){
+      print(paste0("Processing: ", file_i))
+    }
+    
+    id <- file_i %>% 
+      str_replace_all(".*/", "") %>% 
+      str_replace_all("_.*", "") %>% 
+      as.numeric()
+    
+    param_i <- grid_param_df[grid_param_df$id %in% id,]
+    
+    html_to_raster(file_i,
+                   latitude = param_i$latitude,
+                   longitude = param_i$longitude,
+                   height = param_i$height,
+                   width = param_i$width,
+                   zoom = param_i$zoom,
+                   webshot_delay = webshot_delay,
+                   save_png = save_png)
+  })
+  
+  # TODO: Param...
+  r_all <- mosaic(r_list[[1]],
+                  r_list[[2]],
+                  r_list[[3]],
+                  r_list[[4]],
+                  r_list[[5]],
+                  r_list[[6]],
+                  fun = max,
+                  tolerance = 1)
+  
+  return(r_all)
   
 }
 
-#### Make rasters
+## Multiple rasters, one time period
+make_htmls_grid(grid_param_df = grid_param_df,
+                filename_prefix = "nbo_gtt",
+                out_dir = "~/Desktop/gtt/html",
+                map_key = map_key)
+
 html_files <- list.files("~/Desktop/gtt/html", pattern = ".html$", full.names = T)
 
-r_list <- lapply(html_files, function(file_i){
-  print(file_i)
-  
-  id <- file_i %>% 
-    str_replace_all(".*/", "") %>% 
-    str_replace_all("_.*", "") %>% 
-    as.numeric()
-  
-  param_i <- points_to_query[points_to_query$id %in% id,]
-  
-  html_to_raster(file_i,
-                 lat_orig = param_i$lat,
-                 lon_orig = param_i$lon,
-                 height = param_i$height,
-                 width = param_i$width,
-                 zoom = param_i$zoom,
-                 webshot_delay = 15,
-                 save_png = T)
-})
+r <- htmls_to_raster(html_files = html_files,
+                     grid_param_df = grid_param_df,
+                     webshot_delay = 22)
 
-r_all <- mosaic(r_list[[1]],
-                r_list[[2]],
-                r_list[[3]],
-                r_list[[4]],
-                r_list[[5]],
-                r_list[[6]],
-                fun = max,
-                tolerance = 1)
+## Multiple rasters, multiple time periods
+
+
+
+#### Make rasters
+
 
 writeRaster(r_all, "~/Desktop/test.tiff",overwrite=TRUE)
 saveRDS(r_all, "~/Desktop/test.Rds")
 
 r_test <- mosaic(r_list[[1]],
-                 r_list[[2]],
+                 #r_list[[2]],
                  #r_list[[3]],
                  r_list[[4]],
                  #r_list[[5]],
@@ -514,47 +506,4 @@ leaflet() %>% addTiles() %>%
   addRasterImage(r_test, colors = pal, opacity = 0.7) %>%
   addLegend(pal = pal, values = values(r_test),
             title = "Traffic")
-
-
-
-
-make_html(location = c(lat_orig, lon_orig),
-          height = height,
-          width = width,
-          zoom = zoom,
-          out_dir = "~/Desktop/gtt/html",
-          filename_prefix = "nairobi_gtt_",
-          map_key = map_key)
-
-files <- "~/Desktop/gtt/html" %>% list.files(full.names = T) 
-file_i <- files[1]
-
-r <- html_to_raster(filename = file_i,
-                    lat_orig = lat_orig,
-                    lon_orig = lon_orig,
-                    height = height,
-                    width = width,
-                    zoom = zoom,
-                    webshot_delay = 60,
-                    save_png = T)
-
-plot(r)
-
-library(leaflet)
-pal <- colorNumeric(c("#0C2C84", "#41B6C4", "#FFFFCC"), values(r),
-                    na.color = "transparent")
-
-leaflet() %>% addTiles() %>%
-  addRasterImage(r, colors = pal, opacity = 0.7) %>%
-  addLegend(pal = pal, values = values(r),
-            title = "Traffic")
-
-
-
-r <- bing_traffic(lat_orig = -1.286389,
-                  lon_orig = 36.817222,
-                  height = 5000,
-                  width = 5000,
-                  zoom = 16,
-                  bing_key = bing_key)
 
