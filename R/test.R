@@ -31,8 +31,8 @@ if(F){
   gt_make_html(location = c(-1.286389, 36.817222),
                height = 5000,
                width = 5000,
-               zoom = 16,
-               filename = "~/Desktop/gtt/html/nbo.html", 
+               zoom = 15,
+               filename = "~/Desktop/nbo.html", 
                google_key = google_key)
   
   r <- gt_html_to_raster(filename = "~/Desktop/gtt/html/nbo.html",

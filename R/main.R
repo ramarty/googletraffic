@@ -1,4 +1,8 @@
 
+# TODO: html can't be intermediate file; must go directly to raster.
+# Can we just download the html, then convert to raster? So don't need to re-download the html?
+# We just need to call it again?
+
 library(tidyverse)
 library(googleway)
 library(htmlwidgets)
@@ -143,9 +147,9 @@ gt_make_html <- function(location,
                          width,
                          zoom,
                          filename,
-                         google_key,
-                         save_params = T){
+                         google_key){
   
+  #### Define style; all white background
   # Adapted from: https://snazzymaps.com/style/95/roadie
   style <- '[
     {
@@ -190,7 +194,7 @@ gt_make_html <- function(location,
     {}
 ]'
   
-  
+  #### Create map
   gmap <- google_map(key = google_key,
                      location = location,
                      zoom = zoom,
@@ -205,29 +209,11 @@ gt_make_html <- function(location,
                      street_view_control = F) %>%
     add_traffic() 
   
-  ## Filename
-  #if(is.null(time)){
-  #  time <- Sys.time() %>% as.numeric() %>% as.character() %>% str_replace_all("[[:punct:]]", "")
-  #}
-  
-  ## Save as html
-  #fname <- paste0(filename_prefix, "utc", time)
   saveWidget(gmap, 
-             file.path(filename), 
+             filename, 
              selfcontained = T)
   
-  ## Make param dataframe
-  param_list <- list(location = location,
-                     height = height,
-                     width = width,
-                     zoom = zoom)
-  
-  if(save_params){
-    saveRDS(param_list, filename %>% str_replace_all(".html$", "_params.Rds"))
-  }
-  
-  
-  ## Also creates folder; delete that
+  #### Also creates folder; delete that
   unlink(filename %>% str_replace_all(".html$", "_files"), 
          recursive = T)
   
@@ -419,22 +405,22 @@ gt_html_to_raster <- function(filename,
   colors_df <- bind_cols(colors_df, hsl_df)
   
   colors_df <- colors_df %>%
-    mutate(color = case_when(((H == 0) & (S < 0.2)) ~ "background",
-                             ((H == 0) & (S >= 0.2)) ~ "dark-red",
-                             H > 0 & H <= 5 ~ "red",
-                             H >= 20 & H <= 28 ~ "orange",
-                             H >= 120 & H <= 130 ~ "green"))
+    mutate(color = case_when(#((H == 0) & (S < 0.2)) ~ "background",
+      ((H == 0) & (S >= 0.2)) ~ "dark-red",
+      H > 0 & H <= 5 ~ "red",
+      H >= 20 & H <= 28 ~ "orange",
+      H >= 120 & H <= 130 ~ "green"))
   
   ## Apply traffic colors to raster
   colors_unique <- colors_df$color %>% unique()
   colors_unique <- colors_unique[!is.na(colors_unique)]
-  colors_unique <- colors_unique[!(colors_unique %in% "background")]
+  #colors_unique <- colors_unique[!(colors_unique %in% "background")]
   rimg <- matrix(rimg) #%>% raster::t() #%>% base::t()
   for(color_i in colors_unique){
     rimg[rimg %in% colors_df$hex[colors_df$color %in% color_i]] <- color_i
   }
   
-  r[] <- 0
+  r[] <- NA
   r[rimg %in% "green"]    <- 1
   r[rimg %in% "red"]      <- 2
   r[rimg %in% "orange"]   <- 3
@@ -559,17 +545,139 @@ gt_htmls_to_raster <- function(html_files,
                       save_png = save_png)
   })
   
-  # TODO: Param...
-  r_all <- mosaic(r_list[[1]],
-                  r_list[[2]],
-                  r_list[[3]],
-                  r_list[[4]],
-                  r_list[[5]],
-                  r_list[[6]],
-                  fun = max,
-                  tolerance = 1)
+  names(r_list)    <- NULL
+  r_list$fun       <- max
+  r_list$tolerance <- 1
+  
+  r_all <- do.call(mosaic, r_list)
   
   return(r_all)
-  
 }
 
+#' Make Google Traffic Raster
+#' 
+#' Make a raster from Google traffic data, where each pixel has one of four values
+#' indicating traffic volume (no traffic, light, moderate, and heavy).
+#' 
+#' @param location Vector of latitude and longitude
+#' @param height Height
+#' @param width Width
+#' @param zoom Zoom level; integer from 0 to 20. For more information, see [here](https://wiki.openstreetmap.org/wiki/Zoom_levels)
+#' @param webshot_delay How long to wait for google traffic layer to render. Larger height/widths require longer delay times.
+#'
+#' @return Returns a georeferenced raster file. The file can contain the following values: 1 = no traffic; 2 = light traffic; 3 = moderate traffic; 4 = heavy traffic.
+#' @export
+gt_make_raster <- function(location,
+                           height,
+                           width,
+                           zoom,
+                           webshot_delay){
+  
+  ## Filename; as html
+  filename_html <- tempfile(pattern = "file", tmpdir = tempdir(), fileext = ".html")
+  
+  ## Make html
+  gt_make_html(location = location,
+               height = height,
+               width = width,
+               zoom = zoom,
+               filename = filename_html,
+               google_key = google_key)
+  
+  ## Make raster
+  r <- gt_html_to_raster(filename = filename_html,
+                         location = location,
+                         height = height,
+                         width = width,
+                         zoom = zoom,
+                         webshot_delay = webshot_delay)
+  
+  ## Delete html file
+  unlink(filename_html)
+  
+  return(r)
+}
+
+#' Make Google Traffic Raster Based on Grid of Coordinates
+#' 
+#' Make a raster from Google traffic data, where each pixel has one of four values
+#' indicating traffic volume (no traffic, light, moderate, and heavy).
+#' 
+#' @param grid_param_df Grid parameter dataframe produced from `gt_make_point_grid`
+#' @param webshot_delay How long to wait for google traffic layer to render. Larger height/widths require longer delay times.
+#' @param print_progress Show progress for which tile has been processed.
+#'
+#' @return Returns a georeferenced raster file. The file can contain the following values: 1 = no traffic; 2 = light traffic; 3 = moderate traffic; 4 = heavy traffic.
+#' @export
+gt_make_raster_from_grid <- function(grid_param_df,
+                                     webshot_delay,
+                                     print_progress = T){
+  
+  ## Make list of rasters
+  r_list <- lapply(1:nrow(grid_param_df), function(i){
+    
+    if(print_progress){
+      print(paste0("Processing tile ",i," out of ",nrow(grid_param_df)))
+    } 
+    
+    param_i <- grid_param_df[i,]
+    
+    r_i <- gt_make_raster(location      = c(param_i$latitude, param_i$longitude),
+                          height        = param_i$height,
+                          width         = param_i$width,
+                          zoom          = param_i$zoom,
+                          webshot_delay = webshot_delay)
+    
+    return(r_i)
+  })
+  
+  ## Mosaic rasters together
+  names(r_list)    <- NULL
+  r_list$fun       <- max
+  r_list$tolerance <- 1
+  
+  r <- do.call(mosaic, r_list)
+  
+  return(r)
+}
+
+#' Make Google Traffic Raster Based on Polygon
+#' 
+#' Make a raster from Google traffic data, where each pixel has one of four values
+#' indicating traffic volume (no traffic, light, moderate, and heavy).
+#' 
+#' @param polygon `SpatialPolygonsDataframe` in WGS84 CRS.
+#' @param height Height
+#' @param width Width
+#' @param zoom Zoom level; integer from 0 to 20. For more information, see [here](https://wiki.openstreetmap.org/wiki/Zoom_levels)
+#' @param webshot_delay How long to wait for google traffic layer to render. Larger height/widths require longer delay times.
+#' @param reduce_hw Number of pixels to reduce height/width by. The tiles produced by the function may not exactly overlap. Reducing the height and width ensures overlap to eventually remove any blank space.
+#' @param print_progress Show progress for which tile has been processed.
+#'
+#' @return Returns a georeferenced raster file. The file can contain the following values: 1 = no traffic; 2 = light traffic; 3 = moderate traffic; 4 = heavy traffic.
+#' @export
+gt_make_raster_from_polygon <- function(polygon,
+                                        height,
+                                        width,
+                                        zoom,
+                                        webshot_delay,
+                                        reduce_hw = 0,
+                                        print_progress = T){
+  
+  grid_param_df <- gt_make_point_grid(polygon   = polygon,
+                                      height    = height,
+                                      width     = width,
+                                      zoom      = zoom,
+                                      reduce_hw = reduce_hw)
+  
+  if(print_progress){
+    print(paste0("Raster will be created from ",
+                 nrow(grid_param_df),
+                 " Google traffic tiles."))
+  }
+  
+  r <- gt_make_raster_from_grid(grid_param_df,
+                                webshot_delay)
+  
+  return(r)
+}
