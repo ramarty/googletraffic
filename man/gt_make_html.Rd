@@ -4,7 +4,15 @@
 \alias{gt_make_html}
 \title{Make traffic html from Google}
 \usage{
-gt_make_html(location, height, width, zoom, filename, google_key)
+gt_make_html(
+  location,
+  height,
+  width,
+  zoom,
+  filename,
+  google_key,
+  save_params = F
+)
 }
 \arguments{
 \item{location}{Vector of latitude and longitude}

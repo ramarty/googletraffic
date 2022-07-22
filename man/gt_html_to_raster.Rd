@@ -28,7 +28,7 @@ gt_html_to_raster(
 \item{save_png}{The function creates a .png file as an intermediate step. Specify whether the .png file should be kept (default: \code{FALSE})}
 
 \item{polygon}{\code{SpatialPolygonsDataframe} the defines region to be queried.
-\subsection{If \code{save_params} is set to \code{FALSE} in \code{gt_make_html} or \code{gt_make_htmls_from_grid}, then the following must be specified}{
+\subsection{If \code{save_params} is set to \code{FALSE} in `` or \code{gt_make_htmls_from_grid}, then the following must be specified}{
 }}
 }
 \value{
