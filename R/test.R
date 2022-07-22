@@ -26,6 +26,41 @@ if(F){
                   Account == "robmarty3@gmail.com") %>%
     pull(Key)
   
+  # Test functions -------------------------------------------------------------
+  #### From Lat/Long
+  r <- gt_make_raster(location = c(-1.286389, 36.817222),
+                      height = 500,
+                      width = 500,
+                      zoom = 16,
+                      webshot_delay = 2)
+  
+  #### From Grid
+  nbo <- getData('GADM', country='KEN', level=1, path = "~/Desktop")
+  nbo <- nbo[nbo$NAME_1 %in% "Nairobi",]
+  
+  grid_param_df <- gt_make_point_grid(polygon = nbo,
+                                      height = 500,
+                                      width = 500,
+                                      zoom = 12,
+                                      reduce_hw = 100)
+  
+  head(grid_param_df)
+  
+  r <- gt_make_raster_from_grid(grid_param_df = grid_param_df,
+                                webshot_delay = 5)
+  
+  #### From polygon
+  nbo <- getData('GADM', country='KEN', level=1, path = "~/Desktop")
+  nbo <- nbo[nbo$NAME_1 %in% "Nairobi",]
+  
+  r <- gt_make_raster_from_polygon(polygon = nbo,
+                                   height = 500,
+                                   width = 500,
+                                   zoom = 12,
+                                   webshot_delay = 5,
+                                   reduce_hw = 100,
+                                   print_progress = T)
+  
   # One raster, one time period --------------------------------------------------
   ## Option 1
   gt_make_html(location = c(-1.286389, 36.817222),

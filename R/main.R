@@ -7,14 +7,20 @@ library(tidyverse)
 library(googleway)
 library(htmlwidgets)
 library(webshot)
-library(mapview)
+#library(mapview)
 library(REdaS)
 library(raster)
 library(png)
 library(plotwidgets)
-library(geosphere)
+#library(geosphere)
 library(httr)
-library(rgeos)
+library(sf)
+#library(rgeos)
+
+if(F){
+  roxygen2::roxygenise("~/Documents/github/googletraffic")
+}
+
 
 #' Get traffic raster from Bing Maps
 #'
@@ -291,6 +297,11 @@ gt_make_point_grid <- function(polygon,
                                zoom,
                                reduce_hw = 100){
   
+  ## Polygon should be sf object
+  if(class(polygon)[1] %in% "SpatialPolygonsDataFrame"){
+    polygon <- polygon %>% st_as_sf()
+  }
+  
   ## Reduce height/width
   # Extents may not perfectly connect. Reducing the height and width aims to create
   # some overlap in the extents, so all the tiles will connect.
@@ -304,22 +315,33 @@ gt_make_point_grid <- function(polygon,
   r <- raster(ext = extent(polygon), res=c(width_use*pixel_dist_deg,
                                            height_use*pixel_dist_deg))
   
-  p <- as(r, "SpatialPolygonsDataFrame")
+  p <- as(r, "SpatialPolygonsDataFrame") %>% st_as_sf()
   
   ## Only keep polygons (boxes) that intersect with original polygon
-  p_inter_tf <- gIntersects(p, polygon, byid=T) %>% as.vector()
+  p_inter_tf <- st_intersects(p, polygon, sparse=F) %>% as.vector()
   p_inter <- p[p_inter_tf,]
   
   ## Grab points
-  points_df <- p_inter %>%
-    coordinates() %>%
+  points_df <- p %>% 
+    st_centroid() %>%
+    st_coordinates() %>%
     as.data.frame() %>%
-    dplyr::rename(longitude = V1,
-                  latitude = V2) %>%
+    dplyr::rename(longitude = X,
+                  latitude = Y) %>%
     mutate(id = 1:n(),
            height = height,
            width = width,
            zoom = zoom) 
+  
+  # points_df <- p_inter %>%
+  #   coordinates() %>%
+  #   as.data.frame() %>%
+  #   dplyr::rename(longitude = V1,
+  #                 latitude = V2) %>%
+  #   mutate(id = 1:n(),
+  #          height = height,
+  #          width = width,
+  #          zoom = zoom) 
   
   return(points_df)
 }
