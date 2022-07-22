@@ -2,6 +2,8 @@
 
 if(F){
   
+  library(tidyverse)
+  library(googletraffic)
   devtools::install_github("ramarty/googletraffic")
   if(F){
     remove.packages("googletraffic")

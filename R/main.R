@@ -335,7 +335,7 @@ gt_make_point_grid <- function(polygon,
   p_inter <- p[p_inter_tf,]
   
   ## Grab points
-  points_df <- p %>% 
+  points_df <- p_inter %>% 
     st_centroid() %>%
     st_coordinates() %>%
     as.data.frame() %>%
