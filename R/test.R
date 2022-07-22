@@ -1,7 +1,11 @@
 # Test Function
 
 if(F){
-
+  
+  devtools::install_github("ramarty/googletraffic")
+  if(F){
+    remove.packages("googletraffic")
+  }
   
   api_keys_df <- read_csv("~/Dropbox/World Bank/Webscraping/Files for Server/api_keys.csv")
   

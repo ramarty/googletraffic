@@ -165,7 +165,8 @@ gt_make_html <- function(location,
                          width,
                          zoom,
                          filename,
-                         google_key){
+                         google_key,
+                         save_params = F){
   
   #### Define style; all white background
   # Adapted from: https://snazzymaps.com/style/95/roadie
@@ -364,7 +365,7 @@ gt_make_point_grid <- function(polygon,
 #'
 #' @param polygon `SpatialPolygonsDataframe` the defines region to be queried.
 #'
-#' ## If `save_params` is set to `FALSE` in `gt_make_html` or `gt_make_htmls_from_grid`, then the following must be specified
+#' ## If `save_params` is set to `FALSE` in `` or `gt_make_htmls_from_grid`, then the following must be specified
 #' @param height Height
 #' @param width Width
 #' @param zoom Zoom level
