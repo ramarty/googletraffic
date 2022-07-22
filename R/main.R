@@ -4,6 +4,7 @@
 # We just need to call it again?
 
 #' @import tidyverse
+#' @import dplyr
 #' @import googleway
 #' @import htmlwidgets
 #' @import webshot
