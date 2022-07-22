@@ -11,6 +11,7 @@
 #' @import png
 #' @import plotwidgets
 #' @import httr
+#' @import sp
 #' @import sf
 
 if(T){
@@ -121,9 +122,9 @@ bing_traffic <- function(latitude,
   ## Apply traffic colors to raster
   colors_unique <- colors_df$color %>% unique()
   colors_unique <- colors_unique[!is.na(colors_unique)]
-  colors_unique <- colors_unique[!(colors_unique %in% "background")]
+  #colors_unique <- colors_unique[!(colors_unique %in% "background")]
   for(color_i in colors_unique){
-    color_num <- NA
+    color_num <- 0 #NA
     if(color_i == "dark-red") color_num <- 4
     if(color_i == "red")      color_num <- 3
     if(color_i == "orange")   color_num <- 2
@@ -228,6 +229,7 @@ gt_make_html <- function(location,
                      street_view_control = F) %>%
     add_traffic() 
   
+  
   saveWidget(gmap, 
              filename, 
              selfcontained = T)
@@ -239,12 +241,14 @@ gt_make_html <- function(location,
   return(NULL)
 }
 
-# det_google_pixel_dist_m <- function(latitude, zoom){
-#   # https://wiki.openstreetmap.org/wiki/Zoom_levels
-#   pixel_dist_m <- (2*pi*6378137*cos(deg2rad(latitude))/2^zoom)/256
-#   
-#   return(pixel_dist_m)
-# }
+det_google_pixel_dist_m <- function(latitude, zoom){
+  # https://wiki.openstreetmap.org/wiki/Zoom_levels
+  #pixel_dist_m <- (2*pi*6378137*cos(deg2rad(latitude))/2^zoom)/256
+  
+  pixel_dist_m <- (cos(latitude * pi/180) * 2 * pi * 6378137) / (256 * 2^zoom)
+  
+  return(pixel_dist_m)
+}
 
 #' Determine pixel distance in decimal degrees
 #'
@@ -255,7 +259,10 @@ gt_make_html <- function(location,
 #' @return Returns the pixel height/width in decimal degrees (integer)
 det_google_pixel_dist_deg <- function(zoom){
   # https://wiki.openstreetmap.org/wiki/Zoom_levels
+  # https://community.safe.com/s/question/0D54Q000080hbq1SAA/get-bounding-box-zoom-level-to-fetch-static-map
   pixel_dist_deg <- 360/(2^zoom)/256
+  
+  #pixel_dist_deg <- 360/(256^zoom)
   
   return(pixel_dist_deg)
 }
@@ -277,12 +284,63 @@ gt_make_extent <- function(latitude,
                            width,
                            zoom){
   
-  pixel_dist_deg <- det_google_pixel_dist_deg(zoom)
+  #pixel_dist_deg <- det_google_pixel_dist_deg(zoom)
   
-  point_right    <- longitude + pixel_dist_deg*width/2
-  point_left     <- longitude - pixel_dist_deg*width/2
-  point_bottom   <- latitude - pixel_dist_deg*height/2
-  point_top      <- latitude + pixel_dist_deg*height/2
+  # TAKEN FROM https://stackoverflow.com/questions/12507274/how-to-get-bounds-of-a-google-static-map
+  latLngToPoint <- function(mapWidth, mapHeight, lat, lng){
+    
+    x = (lng + 180) * (mapWidth/360)
+    y = ((1 - log(tan(lat * pi / 180) + 1 / cos(lat * pi / 180)) / pi) / 2) * mapHeight
+    
+    return(c(x, y))
+  }
+  
+  pointToLatLng <- function(mapWidth, mapHeight, x, y){
+    
+    lng = x / mapWidth * 360 - 180
+    
+    n = pi - 2 * pi * y / mapHeight
+    lat = (180 / pi *  atan(0.5 * (exp(n) - exp(-n))))
+    
+    return(c(lat, lng))
+  }
+  
+  getImageBounds <- function(mapWidth, mapHeight, xScale, yScale, lat, lng){
+    
+    centreX_Y <- latLngToPoint(mapWidth, mapHeight, lat, lng)
+    centreX <- centreX_Y[1]
+    centreY <- centreX_Y[2]
+    
+    southWestX = centreX - (mapWidth/2)/ xScale
+    southWestY = centreY + (mapHeight/2)/ yScale
+    SWlat_SWlng = pointToLatLng(mapWidth, mapHeight, southWestX, southWestY)
+    SWlat <- SWlat_SWlng[1]
+    SWlng <- SWlat_SWlng[2]
+    
+    northEastX = centreX + (mapWidth/2)/ xScale
+    northEastY = centreY - (mapHeight/2)/ yScale
+    NElat_NElng = pointToLatLng(mapWidth, mapHeight, northEastX, northEastY)
+    NElat <- NElat_NElng[1]
+    NElng <- NElat_NElng[2]
+    
+    return(c(SWlat, SWlng, NElat, NElng))
+  }
+  
+  mapWidth <- 256
+  mapHeight <- 256
+  xScale = (2^zoom) / (width/mapWidth)
+  yScale = (2^zoom) / (height/mapWidth)
+  
+  corners = getImageBounds(mapWidth, mapHeight, xScale, yScale, latitude, longitude)
+  point_left <- corners[2]
+  point_right <- corners[4]
+  point_bottom <- corners[1]
+  point_top <- corners[3]
+  
+  # point_right    <- longitude + pixel_dist_deg*width/2
+  # point_left     <- longitude - pixel_dist_deg*width/2
+  # point_bottom   <- latitude - pixel_dist_deg*height/2
+  # point_top      <- latitude + pixel_dist_deg*height/2
   
   r_extent <- extent(point_left,
                      point_right,
@@ -449,13 +507,13 @@ gt_html_to_raster <- function(filename,
   ## Apply traffic colors to raster
   colors_unique <- colors_df$color %>% unique()
   colors_unique <- colors_unique[!is.na(colors_unique)]
-  #colors_unique <- colors_unique[!(colors_unique %in% "background")]
+  colors_unique <- colors_unique[!(colors_unique %in% "background")]
   rimg <- matrix(rimg) #%>% raster::t() #%>% base::t()
   for(color_i in colors_unique){
     rimg[rimg %in% colors_df$hex[colors_df$color %in% color_i]] <- color_i
   }
   
-  r[] <- NA
+  r[] <- 0 # NA
   r[rimg %in% "green"]    <- 1
   r[rimg %in% "red"]      <- 2
   r[rimg %in% "orange"]   <- 3
@@ -606,7 +664,8 @@ gt_make_raster <- function(location,
                            height,
                            width,
                            zoom,
-                           webshot_delay){
+                           webshot_delay,
+                           google_key){
   
   ## Filename; as html
   filename_html <- tempfile(pattern = "file", tmpdir = tempdir(), fileext = ".html")
@@ -646,6 +705,7 @@ gt_make_raster <- function(location,
 #' @export
 gt_make_raster_from_grid <- function(grid_param_df,
                                      webshot_delay,
+                                     google_key,
                                      print_progress = T){
   
   ## Make list of rasters
@@ -661,7 +721,8 @@ gt_make_raster_from_grid <- function(grid_param_df,
                           height        = param_i$height,
                           width         = param_i$width,
                           zoom          = param_i$zoom,
-                          webshot_delay = webshot_delay)
+                          webshot_delay = webshot_delay,
+                          google_key    = google_key)
     
     return(r_i)
   })
@@ -696,6 +757,7 @@ gt_make_raster_from_polygon <- function(polygon,
                                         width,
                                         zoom,
                                         webshot_delay,
+                                        google_key,
                                         reduce_hw = 0,
                                         print_progress = T){
   
@@ -711,8 +773,139 @@ gt_make_raster_from_polygon <- function(polygon,
                  " Google traffic tiles."))
   }
   
-  r <- gt_make_raster_from_grid(grid_param_df,
-                                webshot_delay)
+  r <- gt_make_raster_from_grid(grid_param_df = grid_param_df,
+                                webshot_delay = webshot_delay,
+                                google_key    = google_key)
   
   return(r)
+}
+
+if(F){
+  
+  # https://gis.stackexchange.com/questions/53940/calculating-bounding-box-from-known-centre-coordinate-and-zoom
+  
+  # https://stackoverflow.com/questions/44784839/calculate-bounding-box-of-static-google-maps-image
+  
+  # https://stackoverflow.com/questions/12507274/how-to-get-bounds-of-a-google-static-map
+  
+  
+  ###########################
+  # TAKEN FROM https://stackoverflow.com/questions/12507274/how-to-get-bounds-of-a-google-static-map
+  latLngToPoint <- function(mapWidth, mapHeight, lat, lng){
+    
+    x = (lng + 180) * (mapWidth/360)
+    y = ((1 - log(tan(lat * pi / 180) + 1 / cos(lat * pi / 180)) / pi) / 2) * mapHeight
+    
+    return(c(x, y))
+  }
+  
+  pointToLatLng <- function(mapWidth, mapHeight, x, y){
+    
+    lng = x / mapWidth * 360 - 180
+    
+    n = pi - 2 * pi * y / mapHeight
+    lat = (180 / pi *  atan(0.5 * (exp(n) - exp(-n))))
+    
+    return(c(lat, lng))
+  }
+  
+  getImageBounds <- function(mapWidth, mapHeight, xScale, yScale, lat, lng){
+    
+    centreX_Y <- latLngToPoint(mapWidth, mapHeight, lat, lng)
+    centreX <- centreX_Y[1]
+    centreY <- centreX_Y[2]
+    
+    southWestX = centreX - (mapWidth/2)/ xScale
+    southWestY = centreY + (mapHeight/2)/ yScale
+    SWlat_SWlng = pointToLatLng(mapWidth, mapHeight, southWestX, southWestY)
+    SWlat <- SWlat_SWlng[1]
+    SWlng <- SWlat_SWlng[2]
+    
+    northEastX = centreX + (mapWidth/2)/ xScale
+    northEastY = centreY - (mapHeight/2)/ yScale
+    NElat_NElng = pointToLatLng(mapWidth, mapHeight, northEastX, northEastY)
+    NElat <- NElat_NElng[1]
+    NElng <- NElat_NElng[2]
+    
+    return(c(SWlat, SWlng, NElat, NElng))
+  }
+  
+  lat = 37.806716
+  lng = -122.477702
+  zoom = 16
+  picHeight = 640 #Resulting image height in pixels (x2 if scale parameter is set to 2)
+  picWidth = 640
+  
+  mapHeight = 256 #Original map size - specific to Google Maps
+  mapWidth = 256
+  
+  xScale = (2^zoom) / (picWidth/mapWidth)
+  yScale = (2^zoom) / (picHeight/mapWidth)
+  
+  corners = getImageBounds(mapWidth, mapHeight, xScale, yScale, lat, lng)
+  corners
+  
+  ## CHECK!!!
+  latitude <- lat
+  longitude <- lng
+  zoom <- 16
+  height = 640
+  width = 640
+  bing_metadata_url <- paste0("https://dev.virtualearth.net/REST/v1/Imagery/Map/Road/",
+                              latitude,",",longitude,"/",zoom,
+                              "?mapSize=",height,",",width,
+                              #"&style=",style,
+                              "&mmd=1",
+                              "&mapLayer=TrafficFlow&format=png&key=",bing_key)
+  
+  md <- bing_metadata_url %>% GET() %>% content(as="text") %>% fromJSON 
+  bbox <- md$resourceSets$resources[[1]]$bbox[[1]]
+  bbox
+  
+  gt_make_extent(latitude,
+                 longitude,
+                 height,
+                 width,
+                 zoom)
+  
+  
+  ###########################
+  f = function(zoom){
+    (128/pi)*2^zoom
+  }
+  
+  calc_x <- function(longitude, zoom){
+    long_rad <- deg2rad(longitude)
+    f(zoom)*(long_rad + pi)
+  }
+  
+  calc_y <- function(latitude, zoom){
+    lat_rad <- deg2rad(latitude)
+    f(zoom)*(pi - ln(tan(pi/4 + lat_rad/2)))
+  }
+  
+  x <- calc_x(36.817222, 16)
+  
+  
+  
+  library(pracma)
+  z = 16
+  y = -1.286389 %>% deg2rad()
+  x = 36.817222 %>% deg2rad()
+  tile2lon <- function(z,x,y){
+    x / 2**z * 360 - 180
+  }
+  
+  z <- 16
+  tile2lat <- function(z,x,y){
+    n = pi - 2 * pi * y / 2**z
+    (180 / pi) * (atan(0.5 * (exp(n) - exp(-n))))
+  }
+  
+  
+  
+  
+  def tile2lat(z,x,y) :
+    n = mp.pi - 2 * mp.pi * y / 2**z;
+  return float((180 / mp.pi) * (mp.atan(0.5 * (mp.exp(n) - mp.exp(-n)))))
 }

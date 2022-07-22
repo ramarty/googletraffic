@@ -21,7 +21,150 @@ if(F){
                   Account == "robmarty3@gmail.com") %>%
     pull(Key)
   
+  # GET EXTENT -----------------------------------------------------------------
+  library(jsonlite)
+  library(httr)
+  latitude = 40.738439
+  longitude = -73.990180
+  
+  #latitude = 0
+  #longitude = 0
+  zoom = 16
+  height = 5000
+  width = 5000
+  
+  bing_metadata_url <- paste0("https://dev.virtualearth.net/REST/v1/Imagery/Map/Road/",
+                              latitude,",",longitude,"/",zoom,
+                              "?mapSize=",height,",",width,
+                              #"&style=",style,
+                              "&mmd=1",
+                              "&mapLayer=TrafficFlow&format=png&key=",bing_key)
+  
+  md <- bing_metadata_url %>% GET() %>% content(as="text") %>% fromJSON 
+  bbox <- md$resourceSets$resources[[1]]$bbox[[1]]
+  bbox
+  gt_make_extent(latitude,
+                 longitude,
+                 height,
+                 width,
+                 zoom)
+  
+  br <- bing_traffic(latitude,
+                     longitude,
+                     height,
+                     width,
+                     zoom,
+                     bing_key)
+  
+  gr <- gt_make_raster(c(latitude, longitude),
+                       height,
+                       width,
+                       zoom,
+                       10,
+                       google_key)
+  
+  
+  pal_gr <- colorNumeric(c("#0C2C84", "#41B6C4", "#FFFFCC"), values(gr),
+                      na.color = "transparent")
+  
+  pal_br <- colorNumeric(c("#0C2C84", "#41B6C4", "#FFFFCC"), values(br),
+                         na.color = "transparent")
+  
+  leaflet() %>% 
+    addTiles() %>%
+    addRasterImage(br, colors = pal, opacity = 0.5) %>%
+    addLegend(pal = pal_br, values = values(br),
+              title = "Traffic")
+  
+  leaflet() %>% 
+    addTiles() %>%
+    addRasterImage(gr, colors = pal, opacity = 0.5) %>%
+    addLegend(pal = pal_gr, values = values(gr),
+              title = "Traffic")
+  
   # Test functions -------------------------------------------------------------
+  style <- '[
+    {
+        "elementType": "labels",
+        "stylers": [
+            {
+                "visibility": "off"
+            }
+        ]
+    },
+    {
+        "elementType": "geometry",
+        "stylers": [
+            {
+                "visibility": "off"
+            }
+        ]
+    },
+    {
+        "featureType": "road",
+        "elementType": "geometry",
+        "stylers": [
+            {
+                "visibility": "on"
+            },
+            {
+                "color": "#ffffff"
+            }
+        ]
+    },
+    {
+        "featureType": "landscape",
+        "stylers": [
+            {
+                "color": "#ffffff"
+            },
+            {
+                "visibility": "on"
+            }
+        ]
+    },
+    {}
+]'
+  
+  # NEW STUFF HERE =============================================================
+  # NOTE: RELIES ON DEVELOPMENT VERSION OF GOOGLEWAY!!!
+  library(googleway)
+  help(google_map)
+  
+  gmap <- google_map(key = google_key,
+                     #location = location,
+                     zoom = 14,
+                     map_bounds = c(36.6414, -1.45354, 37.063969, -1.45354),
+                     #height = height,
+                     #width = width,
+                     styles = style,
+                     zoom_control = F,
+                     map_type_control = F,
+                     scale_control = F,
+                     fullscreen_control = F,
+                     rotate_control = F,
+                     street_view_control = F) %>%
+    add_traffic() 
+  
+  library(htmlwidgets)
+  saveWidget(gmap, 
+             file = "~/Desktop/map.html", 
+             selfcontained = T)
+  
+  library(webshot)
+  webshot_delay <- 10
+  setwd("~/Desktop")
+  webshot(paste0("map",".html"),
+          file = paste0("map",".png"),
+          vheight = "100p",
+          vwidth = "100p",
+          cliprect = "viewport",
+          delay = webshot_delay,
+          zoom = 1)
+  
+  gmap
+  
+  
   #### From Lat/Long
   r <- gt_make_raster(location = c(-1.286389, 36.817222),
                       height = 500,
