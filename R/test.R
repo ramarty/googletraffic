@@ -1,18 +1,7 @@
 # Test Function
 
 if(F){
-  library(tidyverse)
-  library(googleway)
-  library(htmlwidgets)
-  library(webshot)
-  library(mapview)
-  library(REdaS)
-  library(raster)
-  library(png)
-  library(plotwidgets)
-  library(geosphere)
-  library(httr)
-  library(rgeos)
+
   
   api_keys_df <- read_csv("~/Dropbox/World Bank/Webscraping/Files for Server/api_keys.csv")
   
@@ -47,7 +36,7 @@ if(F){
   head(grid_param_df)
   
   r <- gt_make_raster_from_grid(grid_param_df = grid_param_df,
-                                webshot_delay = 5)
+                                webshot_delay = 2)
   
   #### From polygon
   nbo <- getData('GADM', country='KEN', level=1, path = "~/Desktop")

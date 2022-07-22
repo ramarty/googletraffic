@@ -3,19 +3,31 @@
 # Can we just download the html, then convert to raster? So don't need to re-download the html?
 # We just need to call it again?
 
-library(tidyverse)
-library(googleway)
-library(htmlwidgets)
-library(webshot)
-#library(mapview)
-library(REdaS)
-library(raster)
-library(png)
-library(plotwidgets)
-#library(geosphere)
-library(httr)
-library(sf)
-#library(rgeos)
+#' @import tidyverse
+#' @import googleway
+#' @import htmlwidgets
+#' @import webshot
+#' @import raster
+#' @import png
+#' @import plotwidgets
+#' @import httr
+#' @import sf
+
+if(T){
+  library(tidyverse)
+  library(googleway)
+  library(htmlwidgets)
+  library(webshot)
+  #library(REdaS)
+  library(raster)
+  library(png)
+  library(plotwidgets)
+  library(httr)
+  library(sf)
+  #library(rgeos)
+  #library(mapview)
+  #library(geosphere)
+}
 
 if(F){
   roxygen2::roxygenise("~/Documents/github/googletraffic")
