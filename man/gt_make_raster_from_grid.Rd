@@ -4,7 +4,12 @@
 \alias{gt_make_raster_from_grid}
 \title{Make Google Traffic Raster Based on Grid of Coordinates}
 \usage{
-gt_make_raster_from_grid(grid_param_df, webshot_delay, print_progress = T)
+gt_make_raster_from_grid(
+  grid_param_df,
+  webshot_delay,
+  google_key,
+  print_progress = T
+)
 }
 \arguments{
 \item{grid_param_df}{Grid parameter dataframe produced from \code{gt_make_point_grid}}

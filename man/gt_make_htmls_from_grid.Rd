@@ -9,7 +9,7 @@ gt_make_htmls_from_grid(
   filename_suffix,
   out_dir,
   google_key,
-  save_params = T
+  save_params = F
 )
 }
 \arguments{

@@ -14,7 +14,7 @@
 #' @import sp
 #' @import sf
 
-if(T){
+if(F){
   library(tidyverse)
   library(googleway)
   library(htmlwidgets)
@@ -417,6 +417,74 @@ gt_make_point_grid <- function(polygon,
   return(points_df)
 }
 
+#' Converts png to raster
+#'
+#' Converts PNG to raster and translates color values to traffic values
+#'
+#' @param img PNG object from `readPNG`
+#'
+#' @return Returns a raster
+gt_load_png_as_traffic_raster <- function(filename,
+                                          latitude,
+                                          longitude,
+                                          height,
+                                          width,
+                                          zoom){
+  
+  #### Load
+  r   <- raster(filename,1)
+  img <- readPNG(filename)
+  
+  #### Assign traffic colors 
+  ## Image to hex
+  rimg <- as.raster(img) 
+  colors_df <- rimg %>% table() %>% as.data.frame() %>%
+    dplyr::rename(hex = ".")
+  colors_df$hex <- colors_df$hex %>% as.character()
+  
+  ## Assign traffic colors based on hsl
+  hsl_df <- colors_df$hex %>% 
+    col2hsl() %>%
+    t() %>%
+    as.data.frame() 
+  
+  colors_df <- bind_cols(colors_df, hsl_df)
+  
+  colors_df <- colors_df %>%
+    mutate(color = case_when(#((H == 0) & (S < 0.2)) ~ "background",
+      ((H == 0) & (S >= 0.2)) ~ "dark-red",
+      H > 0 & H <= 5 ~ "red",
+      H >= 20 & H <= 28 ~ "orange",
+      H >= 120 & H <= 130 ~ "green"))
+  
+  ## Apply traffic colors to raster
+  colors_unique <- colors_df$color %>% unique()
+  colors_unique <- colors_unique[!is.na(colors_unique)]
+  colors_unique <- colors_unique[!(colors_unique %in% "background")]
+  rimg <- matrix(rimg) #%>% raster::t() #%>% base::t()
+  for(color_i in colors_unique){
+    rimg[rimg %in% colors_df$hex[colors_df$color %in% color_i]] <- color_i
+  }
+  
+  r[] <- 0 # NA
+  r[rimg %in% "green"]    <- 1
+  r[rimg %in% "red"]      <- 2
+  r[rimg %in% "orange"]   <- 3
+  r[rimg %in% "dark-red"] <- 4
+  
+  ## Spatially define raster
+  extent(r) <- gt_make_extent(latitude,
+                              longitude,
+                              height,
+                              width,
+                              zoom)
+  
+  crs(r) <- CRS("+init=epsg:4326")
+  
+  return(r)
+}
+
+
 #' Converts Google HTML file to Raster
 #' 
 #' Converts a Google HTML file into a spatially referenced raster file. 
@@ -479,59 +547,21 @@ gt_html_to_raster <- function(filename,
           zoom = 1)
   
   #### Load as raster and image
-  r   <- raster(file.path(filename_dir,  paste0(filename_only, ".png")),1)
+  png_filename <- file.path(filename_dir, paste0(filename_only, ".png"))
+  
+  r <- gt_load_png_as_traffic_raster(png_filename,
+                                     latitude,
+                                     longitude,
+                                     height,
+                                     width,
+                                     zoom)
+  
+  ## Save PNG
   img <- readPNG(file.path(filename_dir, paste0(filename_only, ".png")))
+  writePNG(img, "~/Desktop/test12345.png")
   
-  #### Assign traffic colors 
-  ## Image to hex
-  rimg <- as.raster(img) 
-  colors_df <- rimg %>% table() %>% as.data.frame() %>%
-    dplyr::rename(hex = ".")
-  colors_df$hex <- colors_df$hex %>% as.character()
-  
-  ## Assign traffic colors based on hsl
-  hsl_df <- colors_df$hex %>% 
-    col2hsl() %>%
-    t() %>%
-    as.data.frame() 
-  
-  colors_df <- bind_cols(colors_df, hsl_df)
-  
-  colors_df <- colors_df %>%
-    mutate(color = case_when(#((H == 0) & (S < 0.2)) ~ "background",
-      ((H == 0) & (S >= 0.2)) ~ "dark-red",
-      H > 0 & H <= 5 ~ "red",
-      H >= 20 & H <= 28 ~ "orange",
-      H >= 120 & H <= 130 ~ "green"))
-  
-  ## Apply traffic colors to raster
-  colors_unique <- colors_df$color %>% unique()
-  colors_unique <- colors_unique[!is.na(colors_unique)]
-  colors_unique <- colors_unique[!(colors_unique %in% "background")]
-  rimg <- matrix(rimg) #%>% raster::t() #%>% base::t()
-  for(color_i in colors_unique){
-    rimg[rimg %in% colors_df$hex[colors_df$color %in% color_i]] <- color_i
-  }
-  
-  r[] <- 0 # NA
-  r[rimg %in% "green"]    <- 1
-  r[rimg %in% "red"]      <- 2
-  r[rimg %in% "orange"]   <- 3
-  r[rimg %in% "dark-red"] <- 4
-  
-  ## Spatially define raster
-  extent(r) <- gt_make_extent(latitude,
-                              longitude,
-                              height,
-                              width,
-                              zoom)
-  
-  crs(r) <- CRS("+init=epsg:4326")
-  
-  ## Delete png
-  if(save_png %in% F){
-    unlink(file.path(filename_dir, paste0(filename_only,".png")))
-  }
+  ## Delete png from temp file
+  unlink(file.path(filename_dir, paste0(filename_only,".png")))
   
   return(r)
 }
@@ -554,7 +584,7 @@ gt_make_htmls_from_grid <- function(grid_param_df,
                                     filename_suffix,
                                     out_dir,
                                     google_key,
-                                    save_params = T){
+                                    save_params = F){
   
   #### Time to add to filename
   # time <- Sys.time() %>% 
@@ -645,6 +675,69 @@ gt_htmls_to_raster <- function(html_files,
   r_all <- do.call(mosaic, r_list)
   
   return(r_all)
+}
+
+#' Make Google Traffic PNG
+#' 
+#' Make a raster from Google traffic data, where each pixel has one of four values
+#' indicating traffic volume (no traffic, light, moderate, and heavy).
+#' 
+#' @param location Vector of latitude and longitude
+#' @param height Height
+#' @param width Width
+#' @param zoom Zoom level; integer from 0 to 20. For more information, see [here](https://wiki.openstreetmap.org/wiki/Zoom_levels)
+#' @param webshot_delay How long to wait for google traffic layer to render. Larger height/widths require longer delay times.
+#'
+#' @return Returns a georeferenced raster file. The file can contain the following values: 1 = no traffic; 2 = light traffic; 3 = moderate traffic; 4 = heavy traffic.
+#' @export
+gt_make_png <- function(location,
+                        height,
+                        width,
+                        zoom,
+                        webshot_delay,
+                        google_key,
+                        out_filename){
+  
+  #### Filename; as html
+  filename_html <- tempfile(pattern = "file", tmpdir = tempdir(), fileext = ".html")
+  
+  #### Make html
+  gt_make_html(location = location,
+               height = height,
+               width = width,
+               zoom = zoom,
+               filename = filename_html,
+               google_key = google_key)
+  
+  #### Webshot; save png
+  ## Make lat/lon
+  latitude = location[1]
+  longitude = location[2]
+  
+  ## Convert .html to png
+  filename_root <- filename_html %>% str_replace_all(".html$", "")
+  filename_only <- basename(filename_root)
+  filename_dir <- filename_root %>% str_replace_all(paste0("/", filename_only), "")
+  
+  setwd(filename_dir)
+  webshot(paste0(filename_only,".html"),
+          file = paste0(filename_only,".png"),
+          vheight = height,
+          vwidth = width,
+          cliprect = "viewport",
+          delay = webshot_delay,
+          zoom = 1)
+  
+  ## Read/Write png to file
+  img <- readPNG(paste0(filename_only,".png"))
+  writePNG(img, out_filename)
+  
+  ## Delete html file
+  unlink(filename_html)
+  unlink(paste0(filename_only,".html"))
+  unlink(paste0(filename_only,".png"))
+  
+  return(NULL)
 }
 
 #' Make Google Traffic Raster
@@ -780,132 +873,3 @@ gt_make_raster_from_polygon <- function(polygon,
   return(r)
 }
 
-if(F){
-  
-  # https://gis.stackexchange.com/questions/53940/calculating-bounding-box-from-known-centre-coordinate-and-zoom
-  
-  # https://stackoverflow.com/questions/44784839/calculate-bounding-box-of-static-google-maps-image
-  
-  # https://stackoverflow.com/questions/12507274/how-to-get-bounds-of-a-google-static-map
-  
-  
-  ###########################
-  # TAKEN FROM https://stackoverflow.com/questions/12507274/how-to-get-bounds-of-a-google-static-map
-  latLngToPoint <- function(mapWidth, mapHeight, lat, lng){
-    
-    x = (lng + 180) * (mapWidth/360)
-    y = ((1 - log(tan(lat * pi / 180) + 1 / cos(lat * pi / 180)) / pi) / 2) * mapHeight
-    
-    return(c(x, y))
-  }
-  
-  pointToLatLng <- function(mapWidth, mapHeight, x, y){
-    
-    lng = x / mapWidth * 360 - 180
-    
-    n = pi - 2 * pi * y / mapHeight
-    lat = (180 / pi *  atan(0.5 * (exp(n) - exp(-n))))
-    
-    return(c(lat, lng))
-  }
-  
-  getImageBounds <- function(mapWidth, mapHeight, xScale, yScale, lat, lng){
-    
-    centreX_Y <- latLngToPoint(mapWidth, mapHeight, lat, lng)
-    centreX <- centreX_Y[1]
-    centreY <- centreX_Y[2]
-    
-    southWestX = centreX - (mapWidth/2)/ xScale
-    southWestY = centreY + (mapHeight/2)/ yScale
-    SWlat_SWlng = pointToLatLng(mapWidth, mapHeight, southWestX, southWestY)
-    SWlat <- SWlat_SWlng[1]
-    SWlng <- SWlat_SWlng[2]
-    
-    northEastX = centreX + (mapWidth/2)/ xScale
-    northEastY = centreY - (mapHeight/2)/ yScale
-    NElat_NElng = pointToLatLng(mapWidth, mapHeight, northEastX, northEastY)
-    NElat <- NElat_NElng[1]
-    NElng <- NElat_NElng[2]
-    
-    return(c(SWlat, SWlng, NElat, NElng))
-  }
-  
-  lat = 37.806716
-  lng = -122.477702
-  zoom = 16
-  picHeight = 640 #Resulting image height in pixels (x2 if scale parameter is set to 2)
-  picWidth = 640
-  
-  mapHeight = 256 #Original map size - specific to Google Maps
-  mapWidth = 256
-  
-  xScale = (2^zoom) / (picWidth/mapWidth)
-  yScale = (2^zoom) / (picHeight/mapWidth)
-  
-  corners = getImageBounds(mapWidth, mapHeight, xScale, yScale, lat, lng)
-  corners
-  
-  ## CHECK!!!
-  latitude <- lat
-  longitude <- lng
-  zoom <- 16
-  height = 640
-  width = 640
-  bing_metadata_url <- paste0("https://dev.virtualearth.net/REST/v1/Imagery/Map/Road/",
-                              latitude,",",longitude,"/",zoom,
-                              "?mapSize=",height,",",width,
-                              #"&style=",style,
-                              "&mmd=1",
-                              "&mapLayer=TrafficFlow&format=png&key=",bing_key)
-  
-  md <- bing_metadata_url %>% GET() %>% content(as="text") %>% fromJSON 
-  bbox <- md$resourceSets$resources[[1]]$bbox[[1]]
-  bbox
-  
-  gt_make_extent(latitude,
-                 longitude,
-                 height,
-                 width,
-                 zoom)
-  
-  
-  ###########################
-  f = function(zoom){
-    (128/pi)*2^zoom
-  }
-  
-  calc_x <- function(longitude, zoom){
-    long_rad <- deg2rad(longitude)
-    f(zoom)*(long_rad + pi)
-  }
-  
-  calc_y <- function(latitude, zoom){
-    lat_rad <- deg2rad(latitude)
-    f(zoom)*(pi - ln(tan(pi/4 + lat_rad/2)))
-  }
-  
-  x <- calc_x(36.817222, 16)
-  
-  
-  
-  library(pracma)
-  z = 16
-  y = -1.286389 %>% deg2rad()
-  x = 36.817222 %>% deg2rad()
-  tile2lon <- function(z,x,y){
-    x / 2**z * 360 - 180
-  }
-  
-  z <- 16
-  tile2lat <- function(z,x,y){
-    n = pi - 2 * pi * y / 2**z
-    (180 / pi) * (atan(0.5 * (exp(n) - exp(-n))))
-  }
-  
-  
-  
-  
-  def tile2lat(z,x,y) :
-    n = mp.pi - 2 * mp.pi * y / 2**z;
-  return float((180 / mp.pi) * (mp.atan(0.5 * (mp.exp(n) - mp.exp(-n)))))
-}

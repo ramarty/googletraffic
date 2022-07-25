@@ -10,6 +10,7 @@ gt_make_raster_from_polygon(
   width,
   zoom,
   webshot_delay,
+  google_key,
   reduce_hw = 0,
   print_progress = T
 )

@@ -21,17 +21,50 @@ if(F){
                   Account == "robmarty3@gmail.com") %>%
     pull(Key)
   
+  # TEST -----------------------------------------------------------------------
+  latitude = 59.915717
+  longitude = 10.755022
+  zoom = 16
+  height = 500
+  width = 500
+  
+  gt_make_png(c(latitude, longitude),
+              height,
+              width,
+              zoom,
+              5,
+              google_key,
+              out_filename = "~/Desktop/t123.png")
+  
+  gr <- gt_make_raster(c(latitude, longitude),
+                       height,
+                       width,
+                       zoom,
+                       5,
+                       google_key)
+  
+  library(leaflet)
+  pal_gr <- colorNumeric(c("#0C2C84", "#41B6C4", "#FFFFCC"), values(gr),
+                         na.color = "transparent")
+  
+  leaflet() %>% 
+    addTiles() %>%
+    addRasterImage(gr, colors = pal_gr, opacity = 0.5) %>%
+    addLegend(pal = pal_gr, values = values(gr),
+              title = "Traffic")
+  
+  
   # GET EXTENT -----------------------------------------------------------------
   library(jsonlite)
   library(httr)
-  latitude = 40.738439
-  longitude = -73.990180
+  latitude = 59.915717
+  longitude = 10.755022
   
   #latitude = 0
   #longitude = 0
   zoom = 16
-  height = 5000
-  width = 5000
+  height = 6000
+  width = 6000
   
   bing_metadata_url <- paste0("https://dev.virtualearth.net/REST/v1/Imagery/Map/Road/",
                               latitude,",",longitude,"/",zoom,
@@ -60,12 +93,11 @@ if(F){
                        height,
                        width,
                        zoom,
-                       10,
+                       20,
                        google_key)
   
-  
   pal_gr <- colorNumeric(c("#0C2C84", "#41B6C4", "#FFFFCC"), values(gr),
-                      na.color = "transparent")
+                         na.color = "transparent")
   
   pal_br <- colorNumeric(c("#0C2C84", "#41B6C4", "#FFFFCC"), values(br),
                          na.color = "transparent")
