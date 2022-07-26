@@ -373,20 +373,34 @@ gt_make_point_grid <- function(polygon,
     polygon <- polygon %>% st_as_sf()
   }
   
+  if(nrow(polygon) > 1){
+    polygon$id <- 1
+    polygon <- polygon %>%
+      group_by(id) %>%
+      summarize(geometry = st_union(geometry))
+  }
+  
   ## Reduce height/width
   # Extents may not perfectly connect. Reducing the height and width aims to create
   # some overlap in the extents, so all the tiles will connect.
   height_use <- height - reduce_hw
   width_use  <- width  - reduce_hw
   
-  ## Pixel distance (degrees)
   pixel_dist_deg   <- det_google_pixel_dist_deg(zoom)
   
   ## Make raster and convert to polygon
-  r <- raster(ext = extent(polygon), res=c(width_use*pixel_dist_deg,
-                                           height_use*pixel_dist_deg))
+  poly_ext <- extent(polygon)
+  
+  r <- raster(ext = poly_ext, res=c(width_use*pixel_dist_deg,
+                                    height_use*pixel_dist_deg))
+  r <- raster::extend(r, c(1,1)) #Expand by one cell
   
   p <- as(r, "SpatialPolygonsDataFrame") %>% st_as_sf()
+  
+  # leaflet() %>%
+  #   addTiles() %>%
+  #   addPolygons(data = nairobi) %>%
+  #   addPolygons(data = extent(polygon) %>% as("SpatialPolygons"))
   
   ## Only keep polygons (boxes) that intersect with original polygon
   p_inter_tf <- st_intersects(p, polygon, sparse=F) %>% as.vector()
@@ -404,6 +418,21 @@ gt_make_point_grid <- function(polygon,
            width = width,
            zoom = zoom) 
   
+  geom <- lapply(1:nrow(points_df), function(i){
+    param <- points_df[i,]
+    
+    ext <- gt_make_extent(param$latitude,
+                          param$longitude,
+                          param$height,
+                          param$width,
+                          param$zoom)
+    
+    as(ext, "SpatialPolygons") %>% st_as_sf()
+  }) %>%
+    bind_rows()
+  
+  points_sf <- st_sf(points_df, geometry = geom$geometry)
+  
   # points_df <- p_inter %>%
   #   coordinates() %>%
   #   as.data.frame() %>%
@@ -414,7 +443,9 @@ gt_make_point_grid <- function(polygon,
   #          width = width,
   #          zoom = zoom) 
   
-  return(points_df)
+  #out <- bind_cols(points_df, p_inter)
+  
+  return(points_sf)
 }
 
 #' Converts png to raster
@@ -466,7 +497,7 @@ gt_load_png_as_traffic_raster <- function(filename,
     rimg[rimg %in% colors_df$hex[colors_df$color %in% color_i]] <- color_i
   }
   
-  r[] <- 0 # NA
+  r[] <- NA
   r[rimg %in% "green"]    <- 1
   r[rimg %in% "red"]      <- 2
   r[rimg %in% "orange"]   <- 3
@@ -719,6 +750,7 @@ gt_make_png <- function(location,
   filename_only <- basename(filename_root)
   filename_dir <- filename_root %>% str_replace_all(paste0("/", filename_only), "")
   
+  current_dir <- getwd()
   setwd(filename_dir)
   webshot(paste0(filename_only,".html"),
           file = paste0(filename_only,".png"),
@@ -729,13 +761,16 @@ gt_make_png <- function(location,
           zoom = 1)
   
   ## Read/Write png to file
-  img <- readPNG(paste0(filename_only,".png"))
+  img <- readPNG(file.path(paste0(filename_only,".png")))
   writePNG(img, out_filename)
   
   ## Delete html file
   unlink(filename_html)
   unlink(paste0(filename_only,".html"))
   unlink(paste0(filename_only,".png"))
+  unlink(paste0(filename_only,".Rds"))
+  
+  setwd(current_dir)
   
   return(NULL)
 }
