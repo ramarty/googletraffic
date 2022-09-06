@@ -32,6 +32,10 @@ if(F){
 
 if(F){
   roxygen2::roxygenise("~/Documents/github/googletraffic")
+  
+  setwd("~/Desktop/googletraffic")
+  usethis::use_pkgdown()
+  pkgdown::build_site("~/Desktop/googletraffic")
 }
 
 
