@@ -35,8 +35,8 @@ if(F){
   
   setwd("~/Desktop/googletraffic")
   usethis::use_pkgdown()
-  pkgdown::build_site()
   usethis::use_pkgdown_github_pages()
+  pkgdown::build_site()
 }
 
 
