@@ -2,6 +2,3 @@ url: https://ramarty.github.io/googletraffic/
 template:
   bootstrap: 5
 
-development:
-  mode: auto
-

@@ -37,6 +37,7 @@ if(F){
   usethis::use_pkgdown()
   usethis::use_pkgdown_github_pages()
   pkgdown::build_site()
+  usethis::use_pkgdown_github_pages()
 }
 
 
