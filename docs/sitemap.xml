@@ -1,57 +1,57 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
   <url>
-    <loc>https://ramarty.github.io/googletraffic/404.html</loc>
+    <loc>/404.html</loc>
   </url>
   <url>
-    <loc>https://ramarty.github.io/googletraffic/LICENSE-text.html</loc>
+    <loc>/LICENSE-text.html</loc>
   </url>
   <url>
-    <loc>https://ramarty.github.io/googletraffic/authors.html</loc>
+    <loc>/authors.html</loc>
   </url>
   <url>
-    <loc>https://ramarty.github.io/googletraffic/index.html</loc>
+    <loc>/index.html</loc>
   </url>
   <url>
-    <loc>https://ramarty.github.io/googletraffic/reference/bing_traffic.html</loc>
+    <loc>/reference/bing_traffic.html</loc>
   </url>
   <url>
-    <loc>https://ramarty.github.io/googletraffic/reference/det_google_pixel_dist_deg.html</loc>
+    <loc>/reference/det_google_pixel_dist_deg.html</loc>
   </url>
   <url>
-    <loc>https://ramarty.github.io/googletraffic/reference/gt_html_to_raster.html</loc>
+    <loc>/reference/gt_html_to_raster.html</loc>
   </url>
   <url>
-    <loc>https://ramarty.github.io/googletraffic/reference/gt_htmls_to_raster.html</loc>
+    <loc>/reference/gt_htmls_to_raster.html</loc>
   </url>
   <url>
-    <loc>https://ramarty.github.io/googletraffic/reference/gt_load_png_as_traffic_raster.html</loc>
+    <loc>/reference/gt_load_png_as_traffic_raster.html</loc>
   </url>
   <url>
-    <loc>https://ramarty.github.io/googletraffic/reference/gt_make_extent.html</loc>
+    <loc>/reference/gt_make_extent.html</loc>
   </url>
   <url>
-    <loc>https://ramarty.github.io/googletraffic/reference/gt_make_html.html</loc>
+    <loc>/reference/gt_make_html.html</loc>
   </url>
   <url>
-    <loc>https://ramarty.github.io/googletraffic/reference/gt_make_htmls_from_grid.html</loc>
+    <loc>/reference/gt_make_htmls_from_grid.html</loc>
   </url>
   <url>
-    <loc>https://ramarty.github.io/googletraffic/reference/gt_make_png.html</loc>
+    <loc>/reference/gt_make_png.html</loc>
   </url>
   <url>
-    <loc>https://ramarty.github.io/googletraffic/reference/gt_make_point_grid.html</loc>
+    <loc>/reference/gt_make_point_grid.html</loc>
   </url>
   <url>
-    <loc>https://ramarty.github.io/googletraffic/reference/gt_make_raster.html</loc>
+    <loc>/reference/gt_make_raster.html</loc>
   </url>
   <url>
-    <loc>https://ramarty.github.io/googletraffic/reference/gt_make_raster_from_grid.html</loc>
+    <loc>/reference/gt_make_raster_from_grid.html</loc>
   </url>
   <url>
-    <loc>https://ramarty.github.io/googletraffic/reference/gt_make_raster_from_polygon.html</loc>
+    <loc>/reference/gt_make_raster_from_polygon.html</loc>
   </url>
   <url>
-    <loc>https://ramarty.github.io/googletraffic/reference/index.html</loc>
+    <loc>/reference/index.html</loc>
   </url>
 </urlset>
